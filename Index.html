@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Investment Dashboard</title>
+    <!-- Including chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      /* Basic styling */
+      .tab {
+        display: inline-block;
+        margin-right: 10px;
+        padding: 10px;
+        cursor: pointer;
+        border: 1px solid #000;
+        background-color: #fff;
+        border-radius: 10px;
+      }
+      
+      .tab:hover{
+        background-color: blue;
+        transition: all;
+        transition-duration: 200ms;
+      }
+      .tab.active {
+        background-color: #d0e0f0;
+ 
+      }
+
+      .header{
+        text-align: center;
+        background-color: deepskyblue;
+        padding: 5px;
+      }
+      #investment-options{
+        text-align: center;
+        
+      }
+      #investment-details > div  {
+        display: none;
+        margin-top: 15px;
+        border: 1px solid #000;
+        padding: 10px;
+      }
+      body {
+        background-color:#BCC0C2;
+        font-family: Arial, sans-serif;
+        box-sizing: border-box;
+        overflow-x: hidden;
+        
+        
+      }
+      #chart-container {
+        display: flex; /* Use flexbox to arrange children horizontally */
+        justify-content: space-around; /* Center the items horizontally */
+        align-items: center; /* Center the items vertically */
+        max-width: 650px;
+        margin: 0 auto;
+        padding-left: 250px;
+        /* gap: 5px; Optional: adds some space between the canvas elements */
+      }
+
+      #chart-container canvas {
+        width: 300px; /* Set a fixed width for the canvas */
+        height: 300px; /* Set a fixed height for the canvas */
+      }
+      .chart {
+        flex: 1;
+        max-width: 200px;
+        height: 200px;
+      }
+      .line {
+        border-top: 1px solid #000;
+        margin-top: 20px;
+        margin-bottom: 10px;
+      }
+      .investment-type-chart {
+        width: 200px;
+        height: 200px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+        margin-left: 30px;
+        margin-right: 30px;
+      }
+      /* Table styles */
+      table {
+        width: 100%; /* Make the table width span the container */
+        border-collapse: collapse; /* Collapse borders so there is no space between them */
+      }
+
+      th,
+      td {
+        border: 1px solid #ddd; /* Add a border to each cell */
+        padding: 8px; /* Add some padding for content inside cells */
+        text-align: left; /* Align text to left for all cells */
+      }
+
+      th {
+        background-color: #f2f2f2; /* Add a background color to headers */
+      }
+
+      /* Add classes for aligning text in 'td' */
+      .right-aligned {
+        text-align: right;
+      }
+    </style>
+  </head>
+
+
+  <body>
+    <div class="header">
+      <h2>
+        Select Customer:
+        <select id="customer-select">
+          <option value="">Select ID</option>
+          <!-- Options will be populated here -->
+        </select>
+      </h2>
+    </div>
+  
+
+    <div id="chart-container">
+      <canvas id="mutual-funds-chart"></canvas>
+      <canvas id="stocks"></canvas>
+      <canvas id="fixed-deposits"></canvas>
+      <canvas id="investment-chart"></canvas>
+    </div>
+
+    <div class="line"></div>
+
+    <div id="investment-options">
+      <div class="tab" data-type="Mutual-Funds">Mutual Funds</div>
+      <div class="tab" data-type="Fixed-Deposits">Fixed Deposits</div>
+      <div class="tab" data-type="Stocks">Stocks</div>
+      <div class="tab" data-type="Loans">Loans</div>
+    </div>
+
+    <div id="investment-details">
+      <div id="Mutual-Funds-details" class="details-section">
+        <!-- Mutual Funds Details -->
+        Details about Mutual Funds...
+      </div>
+      <div id="Fixed-Deposits-details" class="details-section">
+        <!-- Fixed Deposits Details -->
+        Details about Fixed Deposits...
+      </div>
+      <div id="Stocks-details" class="details-section">
+        <!-- Changed from "stock-details" to "stocks-details" -->
+        <!-- Stock Details -->
+        Details about Stocks...
+      </div>
+      <div id="Loans-details" class="details-section">
+        <!-- Loans Details -->
+        Details about Loans...
+      </div>
+    </div>
+
+    <script>
+      let myPieChart = null;
+      let myDyChart = null;
+      var charts = {};
+
+      async function fetchCustomerIDs() {
+        try {
+          let response = await fetch("http://localhost:3000/customers");
+          let customers = await response.json();
+          let customerIDs = customers.map((customer) => customer.CUSTOMERID);
+          return customerIDs;
+        } catch (error) {
+          console.error("Error fetching customer IDs:", error);
+        }
+      }
+
+      function setupTabs() {
+        var tabs = document.querySelectorAll(".tab");
+        tabs.forEach(function (tab) {
+          tab.addEventListener("click", function () {
+            var activeTab = document.querySelector(".tab.active");
+            if (activeTab) {
+              activeTab.classList.remove("active");
+            }
+            tab.classList.add("active");
+            var investmentType = tab.getAttribute("data-type");
+            toggleDetails(investmentType);
+          });
+        });
+      }
+
+      async function toggleDetails(investmentType) {
+        let FieldsToShow = [];
+        let getLabels = [];
+        let getDataPoints = [];
+        let ChartType = "";
+        var customerId = document.getElementById("customer-select").value;
+        if (!customerId) {
+          alert("Please select a customer ID.");
+          return;
+        }
+
+        document
+          .querySelectorAll("#investment-details > div")
+          .forEach((div) => {
+            div.style.display = "none"; // Hide all details
+          });
+
+        console.log(investmentType);
+        let detailsDiv = document.getElementById(investmentType + "-details");
+        if (detailsDiv) {
+          detailsDiv.style.display = "block";
+        } else {
+          console.error("Element not found");
+        }
+        // var activeTab = document.querySelector(".tab.active");
+        // if (activeTab) {
+        //   activeTab.classList.remove("active");
+        // }
+        // detailsDiv.style.display = "block"; // Show the selected investment details
+        try {
+          let response = await fetch(
+            `http://localhost:3000/api/iacc/active/${customerId}`
+          );
+          let data = await response.json();
+          // filter for options
+          switch (investmentType) {
+            case "Stocks":
+              getLabels = createLabelCallback("STOCKNAME");
+              getDataPoints = createDataPointCallback("QUANTITY");
+              investType = "Stocks";
+              ChartType = "doughnut";
+              FieldsToShow = [
+                "STOCKID",
+                "STOCKNAME",
+                "PURCHASEPRICE",
+                "QUANTITY",
+              ];
+              break;
+            case "Mutual-Funds":
+              getLabels = createLabelCallback("FUNDNAME");
+              getDataPoints = createDataPointCallback("INVESTMENTAMOUNT");
+              investType = "Mutual Funds";
+              ChartType = "doughnut";
+              FieldsToShow = [
+                "MUTUALFUNDID",
+                "FUNDNAME",
+                "FUNDTYPE",
+                "NAV",
+                "INVESTMENTAMOUNT",
+              ];
+              break;
+            case "Fixed-Deposits":
+              getLabels = createLabelCallback("FIXEDDEPOSITID");
+              getDataPoints = createDataPointCallback("MATURITYAMOUNT");
+              ChartType = "doughnut";
+              investType = "Fixed Deposits";
+              FieldsToShow = [
+                "FIXEDDEPOSITID",
+                "PRINCIPALAMOUNT",
+                "INTERESTRATE",
+                "MATURITYDATE",
+                "MATURITYAMOUNT",
+              ];
+              break;
+            default:
+              throw new Error("Unknown account type");
+          }
+          let activeAccounts = data.activeAccounts.filter(
+            (account) => account.ACCOUNTTYPE === investType
+          );
+          // "loop on active accounts
+          let alldetails = [];
+          for (const account of activeAccounts) {
+            let detailsResponse = await fetch(
+              `http://localhost:3000/api/account/details?accountType=${investmentType}&investment_acc_id=${account.INVESTMENTACCOUNTID}`
+            );
+            let details = await detailsResponse.json();
+            alldetails.push(details);
+            // Process and display these details in your page
+          }
+          let flattenedDetails = alldetails.flat();
+          // Generate and display the dynamic table
+          let tableHTML = createDynamicTable(flattenedDetails, FieldsToShow);
+          detailsDiv.innerHTML = tableHTML;
+          UpdateSpecificChart(
+            flattenedDetails,
+            investmentType,
+            ChartType,
+            getLabels,
+            getDataPoints
+          ); // Update the specific chart
+        } catch (error) {
+          console.info("Info:", error);
+          detailsDiv.innerHTML = "No data available to show";
+        }
+      }
+
+      function createLabelCallback(fieldName) {
+        return function (item) {
+          return item[fieldName];
+        };
+      }
+
+      // Higher-order function to create a callback that extracts data points
+      function createDataPointCallback(fieldName) {
+        return function (item) {
+          return item[fieldName]; // Assuming it's already a number, if not, parse it
+        };
+      }
+
+      function createDynamicTable(data, fieldsToShow) {
+        if (!data || !Array.isArray(data) || data.length === 0) {
+          return "<p>No data available</p>";
+        }
+        const rightAlignedFields = ["PURCHASEPRICE", "QUANTITY"];
+        // Filter the headers based on the fieldsToShow
+        const headers = fieldsToShow || Object.keys(data[0]);
+        const headerRow = headers
+          .map((header) => `<th>${header}</th>`)
+          .join("");
+
+        // Generate table rows
+        const rows = data
+          .map((row) => {
+            const cells = headers
+              .map((header) => {
+                // Check if the current header should be right-aligned
+                let cellClass = rightAlignedFields.includes(header)
+                  ? "center-aligned"
+                  : "";
+                const cellValue = row[header] == null ? "" : row[header];
+                return `<td class="${cellClass}">${cellValue}</td>`;
+              })
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
+
+        // Construct the table HTML
+        const tableHTML = `<table><thead><tr>${headerRow}</tr></thead><tbody>${rows}</tbody></table>`;
+        return tableHTML;
+      }
+
+      window.onload = async function () {
+        var customerSelect = document.getElementById("customer-select");
+        var customerIds = await fetchCustomerIDs();
+        customerIds.forEach(function (id) {
+          var option = document.createElement("option");
+          option.value = id;
+          option.textContent = id;
+          customerSelect.appendChild(option);
+        });
+        setupTabs();
+        customerSelect.addEventListener("change", async function () {
+          var selectedCustomerId = this.value;
+          if (selectedCustomerId) {
+            try {
+              let url =
+                "http://localhost:3000/api/iacc/active/" + selectedCustomerId;
+              let response = await fetch(url);
+              let data = await response.json();
+              let investment_percentage = calculateInvestmentPercentages(data);
+              if (investment_percentage) {
+                updateChart(investment_percentage);
+              }
+            } catch (error) {
+              console.error("Error fetching data:", error);
+            }
+          }
+        });
+      };
+
+      function calculateInvestmentPercentages(data) {
+        let totalInvestment = 0;
+        const investmentByType = {};
+        data.activeAccounts.forEach((account) => {
+          totalInvestment += account.INVESTMENTPORTFOLIO;
+          if (investmentByType[account.ACCOUNTTYPE]) {
+            investmentByType[account.ACCOUNTTYPE] +=
+              account.INVESTMENTPORTFOLIO;
+          } else {
+            investmentByType[account.ACCOUNTTYPE] = account.INVESTMENTPORTFOLIO;
+          }
+        });
+
+        const percentages = Object.keys(investmentByType).map((type) => {
+          return {
+            accountType: type,
+            percentage: (
+              (investmentByType[type] / totalInvestment) *
+              100
+            ).toFixed(2),
+          };
+        });
+        return percentages;
+      }
+
+      async function fetchInvestmentAccounts(customerId, investmentType) {
+        try {
+          let response = await fetch(
+            `http://localhost:3000/api/iacc/active/${customerId}`
+          );
+          let data = await response.json();
+          let activeAccounts = data.activeAccounts.filter(
+            (account) => account.ACCOUNTTYPE === investmentType
+          );
+
+          for (const account of activeAccounts) {
+            let details = await fetchAccountDetails(
+              investmentType,
+              account.INVESTMENTACCOUNTID
+            );
+            // Process and display these details as needed
+          }
+        } catch (error) {
+          console.error("Error:", error);
+        }
+      }
+
+      function updateChart(invest_data) {
+        var ctx = document
+          .getElementById("mutual-funds-chart")
+          .getContext("2d");
+        if (myPieChart) {
+          myPieChart.destroy();
+        }
+        let labels = invest_data.map((item) => item.accountType);
+        let dataPoints = invest_data.map((item) => parseFloat(item.percentage));
+        myPieChart = new Chart(ctx, {
+          type: "pie",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Investment Distribution",
+                data: dataPoints,
+                backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0"],
+                borderColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0"],
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: "Total Investments",
+                font: {
+                  size: 18,
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function UpdateSpecificChart(
+        invest_data,
+        investmentType,
+        ChartType,
+        getLabels,
+        getDataPoints
+      ) {
+        var ctx = document.getElementById("stocks").getContext("2d");
+        if (myDyChart) {
+          myDyChart.destroy();
+        }
+
+        // Get labels and data points using the provided callback functions
+        let labels = invest_data.map((item) => getLabels(item));
+        let dataPoints = invest_data.map((item) =>
+          parseFloat(getDataPoints(item))
+        );
+
+        myDyChart = new Chart(ctx, {
+          type: ChartType,
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: investmentType + " Distribution",
+                data: dataPoints,
+                backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0"],
+                borderColor: ["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"],
+                borderWidth: 1,
+                hoverOffset: 4,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: investmentType,
+                font: {
+                  size: 18,
+                },
+              },
+            },
+          },
+        });
+      }
+    </script>
+  </body>
+  </html>
